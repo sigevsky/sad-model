@@ -1,0 +1,6 @@
+pydub
+srt
+python_speech_features
+matplotlib
+scipy
+torch
