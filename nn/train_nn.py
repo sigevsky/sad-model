@@ -1,7 +1,10 @@
+import pickle
+import time
+
+import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as dt
-import pickle
 
 from nn.data_prep import generate_samples, SamplingDataset
 from nn.sda_nn import SdaNet
@@ -16,7 +19,8 @@ def load_data(mc_file) -> SdaContent:
 batch_size = 100
 mfcc_feature_size = 13
 hidden_size = 10
-seq_length = 1500
+seq_length = 2000
+ep_step = 100
 
 net = SdaNet(mfcc_feature_size, hidden_size).double()
 
@@ -28,12 +32,14 @@ dl = dt.DataLoader(SamplingDataset(generate_samples(seq_length, data.mfcc, data.
                    batch_size=batch_size, drop_last=False, shuffle=False)
 
 running_loss = 0.0
-for i, epoch in enumerate(range(0, 100)):
-    if i % 5 == 4:  # print every 5 epochs
+for epoch in range(0, 200):
+    if epoch % 5 == 4:  # print every 5 epochs
         print('[%d, %5d] loss: %.3f' %
-              (epoch + 1, i + 1, running_loss / 100))
+              (epoch, epoch * ep_step, running_loss / (5 * ep_step)))
         running_loss = 0.0
-    for j, (inputs, labels) in filter(lambda e: e[0] < 500, enumerate(dl)):
+    for j, (inputs, labels) in enumerate(dl):
+        if j == ep_step:
+            break
         optimizer.zero_grad()
         outputs = net(inputs)
         loss = criterion(outputs.view(batch_size, seq_length), labels)
@@ -43,4 +49,5 @@ for i, epoch in enumerate(range(0, 100)):
         # print statistics
         running_loss += loss.item()
 
+torch.save(net, f"../data/res/models/model-{time.time()}.dict")
 print("Done!")
