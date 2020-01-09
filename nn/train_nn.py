@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as dt
 
-from nn.data_prep import generate_samples, SamplingDataset
+from nn.data_prep import generate_samples, SamplingDataset, random_gen
 from nn.sda_nn import SdaNet
 from preprocess_audio import SdaContent
 
@@ -27,8 +27,9 @@ net = SdaNet(mfcc_feature_size, hidden_size).double()
 criterion = nn.BCELoss().double()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
-data = load_data("../data/res/young_pope/typ1.mc")
-dl = dt.DataLoader(SamplingDataset(generate_samples(seq_length, data.mfcc, data.labels)),
+data = [load_data(f"../data/res/young_pope/typ{i}.mc") for i in range(0, 9)]
+data_gen = random_gen([generate_samples(seq_length, dt.mfcc, dt.labels) for dt in data])
+dl = dt.DataLoader(SamplingDataset(data_gen),
                    batch_size=batch_size, drop_last=False, shuffle=False)
 
 running_loss = 0.0

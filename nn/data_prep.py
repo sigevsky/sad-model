@@ -11,6 +11,11 @@ class SamplingDataset(dt.IterableDataset):
         return self.gen
 
 
+def random_gen(generators):
+    while True:
+        ind = np.random.randint(0, len(generators))
+        yield next(generators[ind])
+
 def generate_samples(seq_length, mfcc_features, labels):
     """
     Generates samples for sda model
