@@ -18,8 +18,8 @@ def load_data(mc_file) -> SdaContent:
 
 batch_size = 100
 mfcc_feature_size = 13
-hidden_size = 10
-seq_length = 2000
+hidden_size = 20
+seq_length = 1500
 ep_step = 100
 
 net = SdaNet(mfcc_feature_size, hidden_size).double()
@@ -32,10 +32,12 @@ dl = dt.DataLoader(SamplingDataset(generate_samples(seq_length, data.mfcc, data.
                    batch_size=batch_size, drop_last=False, shuffle=False)
 
 running_loss = 0.0
-for epoch in range(0, 200):
-    if epoch % 5 == 4:  # print every 5 epochs
+for epoch in range(0, 20):
+    if running_loss < 1. and running_loss != .0:
+        break
+    if epoch % 2 == 1:  # print every 2 epochs
         print('[%d, %5d] loss: %.3f' %
-              (epoch, epoch * ep_step, running_loss / (5 * ep_step)))
+              (epoch + 1, (epoch + 1) * ep_step, running_loss / (5 * ep_step)))
         running_loss = 0.0
     for j, (inputs, labels) in enumerate(dl):
         if j == ep_step:

@@ -20,7 +20,7 @@ def generate_samples(seq_length, mfcc_features, labels):
     data_length = torch.tensor(mfcc_features.shape[0], dtype=torch.float64)
     while True:
         v = np.random.randint(0, data_length - seq_length)
-        yield (mfcc_features[v:v + seq_length], labels[v: v + seq_length])
+        yield mfcc_features[v:v + seq_length], labels[v: v + seq_length]
 
 
 # data = load_data("../data/res/young_pope/typ1.mc")

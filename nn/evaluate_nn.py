@@ -1,7 +1,9 @@
 import pickle
 
+import numpy as np
 import numpy.ma as ma
 import torch
+import matplotlib.pyplot as plt
 
 from nn.data_prep import generate_samples
 from nn.sda_nn import SdaNet
@@ -14,8 +16,8 @@ def load_data(mc_file) -> SdaContent:
 
 
 mfcc_feature_size = 13
-seq_length = 2000
-err_threshold = .5
+seq_length = 3000
+err_threshold = .4
 
 
 def evaluate_model(net: SdaNet):
@@ -26,18 +28,22 @@ def evaluate_model(net: SdaNet):
     silence_out = ma.array(output, mask=list(map(lambda e: True if e == 1 else False, labels)))
     voice_out = ma.array(output, mask=list(map(lambda e: True if e == 0 else False, labels)))
     print(f"Silent samples {silence_out.count()}, voice samples: {voice_out.count()}")
-    # labels are zero on voiceless intervals
+    # labels are 0 on voiceless intervals
     hits_s = ma.where(silence_out < err_threshold)[0].size
     misses_s = ma.where(silence_out > err_threshold)[0].size
     score_s = hits_s / misses_s
     print(f"Silence hits {hits_s}, misses {misses_s}, score {score_s}")
-    # labels are exactly ones on voice intervals
+    # labels are exactly 1 on voice intervals
     hits_v = ma.where(voice_out > err_threshold)[0].size
     misses_v = ma.where(voice_out < err_threshold)[0].size
     score_v = hits_v / misses_v
     print(f"Voiced hits {hits_v}, misses {misses_v}, score {score_v}")
     print(f"Total score {seq_length / (misses_s + 2 * misses_v)}")
 
+    plt.plot(np.linspace(0, seq_length / 100, seq_length), output)
+    plt.plot(np.linspace(0, seq_length / 100, seq_length), labels)
+    plt.show()
 
-evaluate_model(torch.load("../data/res/models/model-1578512869.616221.dict"))
+
+evaluate_model(torch.load("../data/res/models/model-1578575421.4013429.dict"))
 

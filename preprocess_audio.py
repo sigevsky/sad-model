@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import List
+from typing import List, Tuple
 
 import python_speech_features as psf
 import numpy as np
@@ -25,7 +25,7 @@ def split_by_chunks(data, n):
 #  error: (sig.shape[0] / (0.01 * rate) - np.concatenate(mfcc_data).shape[0]) / rate | per second
 def prepare_mfcc(sig, rate, frame_step, frame_size):
     """
-    Prepares mfcc features from a given wav file
+    Prepares mfcc features from a given wav file.
     :param sig: audion signal
     :param rate: rate of the audio signal
     :param frame_step: frame step in seconds
@@ -49,13 +49,26 @@ def is_not_misc_sub(sub: srt.Subtitle):
 
 
 def compensate_lag(lag: timedelta):
-    def go(sub: srt.Subtitle):
+    """
+    Returns wrapper that will adjust start and end time of each subtitle by some lag value.
+    :param lag: Lag value
+    :return: Subtitle -> Subtitle function
+    """
+    def go(sub: srt.Subtitle) -> srt.Subtitle:
         return srt.Subtitle(sub.index, sub.start + lag, end=sub.end + lag, content=sub.content,
                             proprietary=sub.proprietary)
     return go
 
 
-def merge_close_subtitles(subs: List[srt.Subtitle], dist=0.05):
+def merge_close_subtitles(subs: List[srt.Subtitle], dist=0.05) -> List[srt.Subtitle]:
+    """
+    Usually one long phrase is broken down to multitude of subtitles having
+    some fixed time distance between them. This method reconstruct it back from separate sub pieces.
+    :param subs: List of subtitles
+    :param dist: Distance between two subtitles in order to be considered as part of one
+    :return: List of subtitles where subtitles having overlapping
+     with regard to dist intervals are merged into one
+    """
     starts = np.array(list(map(lambda sub: sub.start.total_seconds(), subs)))[1:]
     ends = np.array(list(map(lambda sub: sub.end.total_seconds(), subs)))[:-1]
     to_merge = (np.round(starts - ends)) <= dist
@@ -74,7 +87,18 @@ def merge_close_subtitles(subs: List[srt.Subtitle], dist=0.05):
     return merged_subs
 
 
-def extract_voice_intervals(audio_file: str, sub_file: str, lag: timedelta = timedelta(seconds=0)):
+def extract_voice_intervals(audio_file: str,
+                            sub_file: str,
+                            lag: timedelta = timedelta(seconds=0)) -> Tuple[int, List[np.ndarray]]:
+    """
+    Useful for testing accuracy of subtitles in tandem with wavfile.write("file_name.wav", rate, intr[numb]).
+    :param audio_file: Path of a file from which voice intervals should be extracted
+    :param sub_file: Path of a file with subtitles corresponding to the audio file
+    :param lag: Lag value
+    :return: Tuple
+        0: Rate of the audio which has been processed
+        1: List of intervals containing voice samples
+    """
     rate, sig = wavfile.read(audio_file)
 
     def to_sample_intervals(sub: srt.Subtitle):
@@ -91,6 +115,15 @@ def extract_voice_intervals(audio_file: str, sub_file: str, lag: timedelta = tim
 
 
 def prepare_labels_from_subs(subs: List[srt.Subtitle], frame_step, lag: timedelta = timedelta(seconds=0)):
+    """
+    Prepares labels which will be supplied to the model.
+    :param subs: List of subtitles
+    :param frame_step: Frame step that is used on mfcc feature generation (in seconds)
+    :param lag: Lag value
+    :return: List of labels having value either 0 or 1,
+     where zero stands for absence of the voice in the given interval and one for presence.
+     The values are sampled with frame_step interval
+    """
     def pos(date: timedelta):
         return int(round(date.total_seconds() / frame_step))
 
@@ -109,12 +142,21 @@ def prepare_labels_from_subs(subs: List[srt.Subtitle], frame_step, lag: timedelt
     return labels
 
 
-def prepare_test_data(audio_file, subs_file, output_file):
+def prepare_test_data(audio_file, subs_file, output_file, lag=timedelta(seconds=0.1)):
+    """
+    Extracts mfcc features from audio file along with with labels marking each sample with either 0 or 1 value
+    corresponding to absence or presence of the voice is sampled piece accordingly.
+    :param audio_file: The path to audio file
+    :param subs_file: The path to sub file
+    :param output_file: The path where SdaContent should be saved to
+    :param lag: Lag of the file
+    :return:
+    """
     frame_step = 0.01
     frame_size = 0.025
     with open(subs_file, 'r', encoding='ISO-8859-15') as subs_raw:
         subs = list(srt.parse(subs_raw.read()))
-        labels = prepare_labels_from_subs(subs, frame_step, lag=timedelta(seconds=0.35))
+        labels = prepare_labels_from_subs(subs, frame_step, lag)
     rate, sig = wavfile.read(audio_file)
     mfcc_features = prepare_mfcc(sig, rate, frame_step, frame_size)
     labels = np.pad(labels, (0, mfcc_features.shape[0] - labels.shape[0]), constant_values=.0)
