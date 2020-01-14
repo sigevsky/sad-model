@@ -45,7 +45,7 @@ def prepare_mfcc(sig, rate, frame_step, frame_size):
 
 def is_not_misc_sub(sub: srt.Subtitle):
     c = sub.content
-    return not (c.startswith("<font") or c.startswith("<b>"))
+    return not (c.startswith("<font") or c.startswith("<b>") or ("subtitle" in c) or ("www" in c))
 
 
 def compensate_lag(lag: timedelta):
@@ -54,9 +54,25 @@ def compensate_lag(lag: timedelta):
     :param lag: Lag value
     :return: Subtitle -> Subtitle function
     """
+
     def go(sub: srt.Subtitle) -> srt.Subtitle:
         return srt.Subtitle(sub.index, sub.start + lag, end=sub.end + lag, content=sub.content,
                             proprietary=sub.proprietary)
+
+    return go
+
+
+def shrink_interval(lag: timedelta):
+    """
+    Adds lag only to the end of the interval.
+    :param lag: Lag value
+    :return: Subtitle -> Subtitle function
+    """
+
+    def go(sub: srt.Subtitle) -> srt.Subtitle:
+        return srt.Subtitle(sub.index, sub.start, end=sub.end + lag, content=sub.content,
+                            proprietary=sub.proprietary)
+
     return go
 
 
@@ -87,11 +103,22 @@ def merge_close_subtitles(subs: List[srt.Subtitle], dist=0.05) -> List[srt.Subti
     return merged_subs
 
 
+def intervals_from_subtitles(subs: List[srt.Subtitle],
+                             shrink: timedelta = timedelta(seconds=0),
+                             lag: timedelta = timedelta(seconds=0)):
+    return filter(is_not_misc_sub,
+                  map(compensate_lag(lag),
+                      map(shrink_interval(shrink),
+                          merge_close_subtitles(subs))))
+
+
 def extract_voice_intervals(audio_file: str,
                             sub_file: str,
+                            shrink: timedelta = timedelta(seconds=0),
                             lag: timedelta = timedelta(seconds=0)) -> Tuple[int, List[np.ndarray]]:
     """
     Useful for testing accuracy of subtitles in tandem with wavfile.write("file_name.wav", rate, intr[numb]).
+    :param shrink: Lag added to the end time of subtitle in order to shrink the interval
     :param audio_file: Path of a file from which voice intervals should be extracted
     :param sub_file: Path of a file with subtitles corresponding to the audio file
     :param lag: Lag value
@@ -104,19 +131,21 @@ def extract_voice_intervals(audio_file: str,
     def to_sample_intervals(sub: srt.Subtitle):
         def pos(date: timedelta):
             return int(round(date.total_seconds() * rate))
+
         return sig[pos(sub.start): pos(sub.end)]
 
     with open(sub_file, 'r', encoding='ISO-8859-15') as subs_raw:
         subs = list(srt.parse(subs_raw.read()))
-        return rate, list(map(to_sample_intervals,
-                              filter(is_not_misc_sub,
-                                     map(compensate_lag(lag),
-                                         merge_close_subtitles(subs)))))
+        return rate, list(map(to_sample_intervals, intervals_from_subtitles(subs, shrink=shrink, lag=lag)))
 
 
-def prepare_labels_from_subs(subs: List[srt.Subtitle], frame_step, lag: timedelta = timedelta(seconds=0)):
+def prepare_labels_from_subs(subs: List[srt.Subtitle],
+                             frame_step,
+                             shrink: timedelta = timedelta(seconds=0),
+                             lag: timedelta = timedelta(seconds=0)):
     """
     Prepares labels which will be supplied to the model.
+    :param shrink: Lag added to the end time of subtitle in order to shrink the interval
     :param subs: List of subtitles
     :param frame_step: Frame step that is used on mfcc feature generation (in seconds)
     :param lag: Lag value
@@ -124,16 +153,14 @@ def prepare_labels_from_subs(subs: List[srt.Subtitle], frame_step, lag: timedelt
      where zero stands for absence of the voice in the given interval and one for presence.
      The values are sampled with frame_step interval
     """
+
     def pos(date: timedelta):
         return int(round(date.total_seconds() / frame_step))
 
     def to_sample_intervals(sub: srt.Subtitle):
         return pos(sub.start), pos(sub.end)
 
-    intervals = list(map(to_sample_intervals,
-                         filter(is_not_misc_sub,
-                                map(compensate_lag(lag),
-                                    merge_close_subtitles(subs)))))
+    intervals = list(map(to_sample_intervals, intervals_from_subtitles(subs, shrink=shrink, lag=lag)))
 
     labels = np.zeros(intervals[-1][1])  # end of the last interval
     for a, b in intervals:
@@ -142,10 +169,14 @@ def prepare_labels_from_subs(subs: List[srt.Subtitle], frame_step, lag: timedelt
     return labels
 
 
-def prepare_test_data(audio_file, subs_file, output_file, lag=timedelta(seconds=0.1)):
+def prepare_test_data(audio_file, subs_file,
+                      output_file,
+                      shrink=timedelta(seconds=0.0),
+                      lag=timedelta(seconds=0.1)):
     """
     Extracts mfcc features from audio file along with with labels marking each sample with either 0 or 1 value
     corresponding to absence or presence of the voice is sampled piece accordingly.
+    :param shrink: Lag added to the end time of subtitle in order to shrink the interval
     :param audio_file: The path to audio file
     :param subs_file: The path to sub file
     :param output_file: The path where SdaContent should be saved to
@@ -156,7 +187,7 @@ def prepare_test_data(audio_file, subs_file, output_file, lag=timedelta(seconds=
     frame_size = 0.025
     with open(subs_file, 'r', encoding='ISO-8859-15') as subs_raw:
         subs = list(srt.parse(subs_raw.read()))
-        labels = prepare_labels_from_subs(subs, frame_step, lag)
+        labels = prepare_labels_from_subs(subs, frame_step, shrink=shrink, lag=lag)
     rate, sig = wavfile.read(audio_file)
     mfcc_features = prepare_mfcc(sig, rate, frame_step, frame_size)
     labels = np.pad(labels, (0, mfcc_features.shape[0] - labels.shape[0]), constant_values=.0)
