@@ -21,7 +21,8 @@ err_threshold = .4
 
 
 def evaluate_model(net: SdaNet):
-    eval_data = load_data("../data/res/young_pope/typ1.mc")
+    net.eval()
+    eval_data = load_data("../data/res/young_pope/typ8.mc")
     inputs, labels = next(generate_samples(seq_length, eval_data.mfcc, eval_data.labels))
     # output has a shape of 1 x 2000 x 1 so we need to get rid of 1th dimensions
     output = net(torch.tensor(inputs.reshape(1, seq_length, -1), dtype=torch.float64)).detach().numpy()[0, :, 0]
