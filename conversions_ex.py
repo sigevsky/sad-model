@@ -39,6 +39,4 @@ plt.imshow(np.flipud(spectrum_2.T))
 # plt.show()
 
 res = mfcc(sig, rate)
-print("Done")
 
-# convert_to_wav("data/raw/jff.mp3", "data/jff.wav")

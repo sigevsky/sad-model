@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.utils.data as dt
 
+from preprocess_audio import SdaContent
+
 
 class SamplingDataset(dt.IterableDataset):
     def __init__(self, gen):
@@ -16,6 +18,7 @@ def random_gen(generators):
         ind = np.random.randint(0, len(generators))
         yield next(generators[ind])
 
+
 def generate_samples(seq_length, mfcc_features, labels):
     """
     Generates samples for sda model
@@ -28,6 +31,8 @@ def generate_samples(seq_length, mfcc_features, labels):
         yield mfcc_features[v:v + seq_length], labels[v: v + seq_length]
 
 
-# data = load_data("../data/res/young_pope/typ1.mc")
-# res = list(it.islice(generate_samples(1000, data.mfcc, data.labels), 5))
-# print(len(res))
+def sample_interval(fcontent: SdaContent, audio_sig, rate, from_s, to_s):
+    inputs = fcontent.mfcc[int(from_s / fcontent.frame_step): int(to_s / fcontent.frame_step)]
+    labels = fcontent.labels[int(from_s / fcontent.frame_step): int(to_s / fcontent.frame_step)]
+    sound = audio_sig[from_s * rate: to_s * rate]
+    return inputs, labels, sound
